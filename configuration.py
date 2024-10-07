@@ -39,11 +39,7 @@ class NeuralNet:
         self.isTrained = False
         self.isQuantized = isQtz
         self.QuantizerStep = QtzStp
-
-    """
-    TODO: alpha might not be of importance for rate performance but it may
-    well be for overhead reduction (less RIS config. bits)
-    """
+        
     def soft_round(x, alpha=7., eps=10**-3):
         # This guards the gradient of tf.where below against NaNs, while maintaining
         # correctness, as for alpha < eps the result is ignored.
@@ -145,39 +141,6 @@ class NeuralNet:
                         )
                     )
                 ) / (predicted_y.shape[0] + self.numberOfSubcarriers)
-        
-        # def loss_fn(predicted_y, qtzStp, F, testFlag):
-        #     if self.isQuantized: predicted_y = NeuralNet.soft_round(predicted_y / qtzStp) * qtzStp
-        #     if testFlag:
-        #         rotatedChannel = tf.math.reduce_sum(
-        #             NeuralNet.mult_phasor(
-        #                 compositeChannel[-predicted_y.shape[0]:], tf.expand_dims(predicted_y, axis=2)
-        #                 ), axis=1
-        #             )
-        #         combined_frequencyDomain = tf.matmul(
-        #             tf.expand_dims(
-        #                 channelAPtoUE[-predicted_y.shape[0]:] + rotatedChannel, axis=1
-        #                 ), F, adjoint_b=True
-        #             )
-        #     else:
-        #         rotatedChannel = tf.math.reduce_sum(
-        #             NeuralNet.mult_phasor(
-        #                 compositeChannel[:predicted_y.shape[0]], tf.expand_dims(predicted_y, axis=2)
-        #                 ), axis=1
-        #             )
-        #         combined_frequencyDomain = tf.matmul(
-        #             tf.expand_dims(
-        #                 channelAPtoUE[:predicted_y.shape[0]] + rotatedChannel, axis=1
-        #                 ), F, adjoint_b=True
-        #             )
-                
-        #     return tf.math.reduce_sum(
-        #         -tf.square(
-        #             tf.abs(
-        #                 tf.squeeze(combined_frequencyDomain)
-        #                 )
-        #             )
-        #         ) / (predicted_y.shape[0] + self.numberOfSubcarriers)
 
         INIT_ETA = 10**-2
         TOL = 10**-2
@@ -217,12 +180,6 @@ class NeuralNet:
                             training=True
                             )
                         loss_value = loss_fn(out, quantizerStep, F) * 10**9
-                        # out = self.NeuralNetModel(
-                        #     (APtoUE_frequencyDomain[:channelAPtoUE.shape[0] // 4],
-                        #      strongestPath_frequencyDomain[:channelAPtoUE.shape[0] // 4]),
-                        #     training=True
-                        #     )
-                        # loss_value = loss_fn(out, quantizerStep, F, False) * 10**9
 
                     grads = tape.gradient(loss_value, self.NeuralNetModel.trainable_weights)
                     optimizer.apply_gradients(zip(grads, self.NeuralNetModel.trainable_weights))
@@ -230,13 +187,6 @@ class NeuralNet:
                     # sys.stdout.write('\r')
                     # sys.stdout.write("%.1f" % (100 / ITERATIONS_RUNS * (step + 1)))
                     # sys.stdout.flush()
-
-                # out_test = self.NeuralNetModel(
-                #     (APtoUE_frequencyDomain[(3 * channelAPtoUE.shape[0] // 4):],
-                #      strongestPath_frequencyDomain[(3 * channelAPtoUE.shape[0] // 4):]),
-                #     training=False
-                #     )
-                # loss_valueTest = loss_fn(out_test, quantizerStep, F, True) * 10**9
                 
                 # sys.stdout.write("\n Loss: {:.4f}".format(loss_value))
                 # sys.stdout.write("\n Test Loss: {:.4f}".format(loss_valueTest))
@@ -318,9 +268,6 @@ class ConvexSolver:
             phi = cp.Variable(N, complex=True)
             y = cp.Variable(K); a = cp.Variable(K); b = cp.Variable(K);
             logConst = cp.Constant(np.log(2))
-            # noiseConst = cp.Constant(1 / (10**6 * gamma))
-            # normlzConst = cp.Constant(self.bandwidth)
-            # numrcConst = cp.Constant(10**2) # this constant is used for numeric acrobatics
 
             aTilde = np.real(F.conj() @ (hd + V.T @ phiTilde))
             bTilde = np.imag(F.conj() @ (hd + V.T @ phiTilde))
@@ -336,22 +283,6 @@ class ConvexSolver:
                 cp.Maximize(
                     cp.sum(cp.log(1 + cp.multiply(y, p)) / logConst)
                     ), constraints)
-            
-            """
-            TODO: It would be preferable to find a paper where the CVX solver 
-            results could be validaded against the STM.
-            """
-            # prob = cp.Problem(
-            #     cp.Maximize(
-            #         cp.sum(
-            #             (
-            #                 cp.log(
-            #                     (noiseConst / numrcConst) * (1 / noiseConst + cp.multiply(y, p))
-            #                     ) + cp.log(numrcConst)
-            #                 ) / logConst
-            #             ) / normlzConst
-            #         ), constraints
-            #     )
 
             prevValue = np.inf; TOL = 10**-2
             while True:
@@ -391,12 +322,6 @@ class ConvexSolver:
             sys.stdout.flush()
 
             initPhi = np.pi * (2 * np.random.rand(self.numberOfTiles) - 1)
-            # for k in range(saIterations):
-            #     initPhi = [np.exp(-1j * ((np.conj(hd[r]) +
-            #                               np.conj(V[r, np.arange(self.numberOfTiles) != i]).T @
-            #                               initPhi[np.arange(self.numberOfTiles) != i]) @
-            #                              V[r, i])) for i in range(self.numberOfTiles)]
-            #     initPhi = np.array(initPhi)
 
             initPhi = [
                 np.exp(-1j *
